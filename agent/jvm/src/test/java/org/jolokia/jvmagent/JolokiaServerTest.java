@@ -43,14 +43,16 @@ import static org.testng.Assert.*;
  * @since 31.08.11
  */
 public class JolokiaServerTest {
+    private final String JKS_PASSWORD = "changeit";
+    private final String PKCS12_PASSWORD = "1234";
 
     @Test
     public void http() throws Exception {
         String configs[] = {
-                null,
-                "executor=fixed,threadNr=5",
-                "executor=cached",
-                "executor=single"
+            null,
+            "executor=fixed,threadNr=5",
+            "executor=cached",
+            "executor=single"
         };
 
         for (String c : configs) {
@@ -82,10 +84,18 @@ public class JolokiaServerTest {
     ==============
     - 1 no client auth:
       - 11 https only (no certs)
+        - 111 without CA validation --> okay
+        - 112 with CA validation --> fail
       - 12 with keystore
+        - 121 with valid keystore
+          - 1211 without CA validation --> okay
+          - 1212 with CA validation --> okay
+        - 122 with invalid keystore
+          - 1221 without CA validation --> okay
+          - 1222 with CA validation --> fail
       - 13 with PEM server cert
-        - 131 without CA validation
-        - 132 with CA validation (positive)
+        - 131 without CA validation --> okay
+        - 132 with CA validation (positive) --> okay
     - 2 with client auth:
       - 21 self-signed client cert --> fail
       - 22 properly signed client cert --> ok
@@ -95,6 +105,7 @@ public class JolokiaServerTest {
         - 233 with no extended key usage:
           - 2331 with 'extendedClientCheck' options == true --> fail
           - 2332 with 'extendedClientCheck' option == false --> ok
+        - 234 with no client key --> fail
       - 24 with 'clientPrincipal' given
         - 241 matching clientPrincipal --> ok
         - 241 non-matching clientPrincipal --> fail
@@ -102,30 +113,52 @@ public class JolokiaServerTest {
      */
 
     @Test
-    public void t_11_https_only() throws Exception {
-        httpsRoundtrip("agentId=test", false);
+    // This test uses an auto-generated self-signed cert and key, thus we can't validate the cert
+    public void t_111_https_only_skip_ca_validation() throws Exception {
+        httpsRountripNoClientAuth("agentId=test", false);
+    }
+
+    @Test(expectedExceptions = SSLHandshakeException.class, expectedExceptionsMessageRegExp = ".*PKIX path building failed.*")
+    // This test uses an auto-generated self-signed cert and key, thus validating the cert should fail
+    public void t_112_https_only_validate_ca() throws Exception {
+        httpsRountripNoClientAuth("agentId=test", true, false);
     }
 
     @Test
-    public void t_12_with_keystore() throws Exception {
-        httpsRoundtrip("keystore=" + getResourcePath("/keystore") + ",keystorePassword=jetty7", false);
+    public void t_1211_with_good_keystore_skip_ca_validation() throws Exception {
+        httpsRountripNoClientAuth("keystore=" + getCertPath("server/server.jks") + ",keystorePassword=" + JKS_PASSWORD, false);
+    }
+
+    @Test
+    public void t_1212_with_good_keystore_validate_va() throws Exception {
+        httpsRountripNoClientAuth("keystore=" + getCertPath("server/server.jks") + ",keystorePassword=" + JKS_PASSWORD, true);
+    }
+
+    @Test
+    public void t_1221_with_bad_keystore_skip_ca_validation() throws Exception {
+        httpsRountripNoClientAuth("keystore=" + getResourcePath("/keystore") + ",keystorePassword=jetty7", false);
+    }
+
+    @Test(expectedExceptions = SSLHandshakeException.class, expectedExceptionsMessageRegExp = ".*PKIX path building failed.*")
+    public void t_1222_with_bad_keystore_validate_ca() throws Exception {
+        httpsRountripNoClientAuth("keystore=" + getResourcePath("/keystore") + ",keystorePassword=jetty7", true, false);
     }
 
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = ".*without.*key.*")
     public void serverCertWithoutKey() throws Exception {
-        httpsRoundtrip("serverCert=" + getCertPath("server/cert.pem"), false);
+        httpsRountripNoClientAuth("serverCert=" + getCertPath("server/server.pem"), false);
     }
 
     @Test
     public void t_131_pem_without_ca() throws Exception {
-        httpsRoundtrip("serverCert=" + getCertPath("server/cert.pem") + "," +
-                       "serverKey=" + getCertPath("server/key.pem"),
-                       false);
+        httpsRountripNoClientAuth("serverCert=" + getCertPath("server/server.pem") + "," +
+                       "serverKey=" + getCertPath("server/server-key.pem"),
+                       true);
     }
 
     @Test
     public void t_132_pem_with_ca() throws Exception {
-        httpsRoundtrip(getFullCertSetup(), true);
+        httpsRountripNoClientAuth(getFullCertSetup(), true);
     }
 
     @Test(expectedExceptions = IOException.class)
@@ -178,6 +211,11 @@ public class JolokiaServerTest {
                        "client/with-wrong-key-usage");
     }
 
+    @Test(expectedExceptions = IOException.class)
+    public void t_234_with_extended_client_key_usage_and_no_client_key() throws Exception {
+        httpsRountripNoClientAuth("useSslClientAuthentication=true,extendedClientCheck=true," + getFullCertSetup(), true);
+    }
+
     @Test
     public void t_241_with_client_principal() throws Exception {
         httpsRoundtrip("useSslClientAuthentication=true,clientPrincipal=O\\=jolokia.org\\,CN\\=Client signed with client key usage,"
@@ -197,27 +235,18 @@ public class JolokiaServerTest {
     @Test(expectedExceptions = IllegalArgumentException.class, expectedExceptionsMessageRegExp = ".*no CA.*")
     public void t_25_no_ca_given() throws Exception {
         httpsRoundtrip("useSslClientAuthentication=true,"
-                       + "serverCert=" + getCertPath("server/cert.pem") + "," +
-                       "serverKey=" + getCertPath("server/key.pem"),
+                       + "serverCert=" + getCertPath("server/server.pem") + "," +
+                       "serverKey=" + getCertPath("server/server-key.pem"),
                        true,
                        "client/with-key-usage");
     }
 
-    // ==================================================================================================
-
-    private String getFullCertSetup() {
-        return "serverCert=" + getCertPath("server/cert.pem") + "," +
-               "serverKey=" + getCertPath("server/key.pem") + "," +
-               "caCert=" + getCertPath("ca/cert.pem");
-    }
-
-
     @Test
     public void sslWithAdditionalHttpsSettings() throws Exception {
-        httpsRoundtrip("keystore=" + getResourcePath("/keystore") +
-                       ",keystorePassword=jetty7" +
+        httpsRoundtripWithClientKey("keystore=" + getCertPath("server/server.jks") +
+                       ",keystorePassword=" + JKS_PASSWORD +
                        ",config=" + getResourcePath("/agent-test-additionalHttpsConf.properties"),
-                       false);
+                       true);
     }
 
     @Test
@@ -228,15 +257,6 @@ public class JolokiaServerTest {
         JolokiaServer server = new JolokiaServer(config, false);
         server.start();
 
-        // Skipping hostname verification because the cert doesn't have a SAN of localhost
-        HostnameVerifier verifier = new HostnameVerifier() {
-            @Override
-            public boolean verify(String host, SSLSession sslSession) {
-                return true;
-            }
-        };
-
-        HostnameVerifier oldVerifier = HttpsURLConnection.getDefaultHostnameVerifier();
         SSLSocketFactory oldSslSocketFactory = HttpsURLConnection.getDefaultSSLSocketFactory();
 
         List<String> cipherSuites = Arrays.asList(config.getSSLCipherSuites());
@@ -255,7 +275,6 @@ public class JolokiaServerTest {
                     SSLContext sc = SSLContext.getInstance(protocol);
                     sc.init(new KeyManager[0], tms, new java.security.SecureRandom());
 
-                    HttpsURLConnection.setDefaultHostnameVerifier(verifier);
                     HttpsURLConnection.setDefaultSSLSocketFactory(
                         new FakeSSLSocketFactory(sc.getSocketFactory(), new String[]{protocol}, new String[]{cipherSuite}));
 
@@ -271,7 +290,6 @@ public class JolokiaServerTest {
                     // We make sure at least one connection with this protocol succeeds if expected
                     // down below
                 } finally {
-                    HttpsURLConnection.setDefaultHostnameVerifier(oldVerifier);
                     HttpsURLConnection.setDefaultSSLSocketFactory(oldSslSocketFactory);
                 }
             }
@@ -303,7 +321,13 @@ public class JolokiaServerTest {
         server.stop();
     }
 
-    // ==================================================================
+    // =============================================================================================
+
+    private String getFullCertSetup() {
+        return "serverCert=" + getCertPath("server/server.pem") + "," +
+            "serverKey=" + getCertPath("server/server-key.pem") + "," +
+            "caCert=" + getCertPath("ca/ca.pem");
+    }
 
     private String getCertPath(String pCert) {
         return getResourcePath("/certs/" + pCert);
@@ -326,19 +350,36 @@ public class JolokiaServerTest {
         checkServer(config, pDoRequest);
     }
 
-    private void httpsRoundtrip(String pConfig, boolean pValidateCa) throws Exception {
-        httpsRoundtrip(pConfig, pValidateCa, "client/with-key-usage");
+    private void httpsRountripNoClientAuth(String pConfig, boolean pValidateCaAndHostname) throws Exception {
+        httpsRoundtrip(pConfig, pValidateCaAndHostname, null);
     }
 
-    private void httpsRoundtrip(String pConfig, boolean pValidateCa, String clientCert) throws Exception {
+    private void httpsRountripNoClientAuth(String pConfig, boolean pValidateCa, boolean pValidateHostname) throws Exception {
+        httpsRoundtrip(pConfig, pValidateCa, pValidateHostname, null);
+    }
+
+    private void httpsRoundtripWithClientKey(String pConfig, boolean pValidateCa) throws Exception {
+        httpsRoundtrip(pConfig, pValidateCa, true, "client/with-key-usage");
+    }
+
+    private void httpsRoundtrip(String pConfig, boolean pValidateCaAndHostname, String clientCert) throws Exception {
+        httpsRoundtrip(pConfig, pValidateCaAndHostname, pValidateCaAndHostname, clientCert);
+    }
+
+    private void httpsRoundtrip(String pConfig, boolean pValidateCa, boolean pValidateHostname, String clientCert) throws Exception {
         JvmAgentConfig config = new JvmAgentConfig(
                 prepareConfigString("host=localhost,port=" + EnvTestUtil.getFreePort() + ",protocol=https," + pConfig));
-        HostnameVerifier verifier = new HostnameVerifier() {
-            @Override
-            public boolean verify(String host, SSLSession sslSession) {
-                return true;
-            }
-        };
+        if (!pValidateCa)
+            assertFalse(pValidateHostname, "Can't validate the hostname without validating the CA");
+        HostnameVerifier verifier = null;
+        if (!pValidateHostname) {
+            verifier = new HostnameVerifier() {
+                @Override
+                public boolean verify(String host, SSLSession sslSession) {
+                    return true;
+                }
+            };
+        }
         checkServer(config, true, verifier, pValidateCa, clientCert);
     }
 
@@ -364,7 +405,7 @@ public class JolokiaServerTest {
         } else {
             KeyStore keystore = KeyStore.getInstance("JKS");
             keystore.load(null);
-            KeyStoreUtil.updateWithCaPem(keystore, new File(getCertPath("ca/cert.pem")));
+            KeyStoreUtil.updateWithCaPem(keystore, new File(getCertPath("ca/ca.pem")));
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
             tmf.init(keystore);
             return tmf.getTrustManagers();
@@ -387,33 +428,42 @@ public class JolokiaServerTest {
         };
     }
 
-    private void checkServer(JvmAgentConfig pConfig, boolean pDoRequest,
+    private void checkServer(JvmAgentConfig pConfig,
+                             boolean pDoRequest,
                              HostnameVerifier pVerifier,
                              boolean pValidateCa,
                              String pClientCert) throws Exception {
         JolokiaServer server = new JolokiaServer(pConfig, false);
+
         server.start();
-        //Thread.sleep(2000);
+
         HostnameVerifier oldVerifier = HttpsURLConnection.getDefaultHostnameVerifier();
         SSLSocketFactory oldSslSocketFactory = HttpsURLConnection.getDefaultSSLSocketFactory();
+
         try {
             if (pDoRequest) {
                 if (pVerifier != null) {
                     HttpsURLConnection.setDefaultHostnameVerifier(pVerifier);
                 }
-                TrustManager tms[] = null;
-                    KeyManager kms[] = null;
-                SSLContext sc = SSLContext.getInstance("SSL");
-                tms = getTrustManagers(pValidateCa);
+
+                // Setup our key manager if using client auth
+                KeyManager kms[] = null;
                 if (pClientCert != null) {
                     KeyStore ks = KeyStore.getInstance("PKCS12");
-                    InputStream fis = getClass().getResourceAsStream("/certs/" + pClientCert + "/cert.p12");
-                    ks.load(fis, "1234".toCharArray());
+                    InputStream fis = getClass().getResourceAsStream("/certs/" + pClientCert + "/client.p12");
+                    ks.load(fis, PKCS12_PASSWORD.toCharArray());
                     KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-                    kmf.init(ks, "1234".toCharArray());
-                    kms = kmf.getKeyManagers() ;
+                    kmf.init(ks, PKCS12_PASSWORD.toCharArray());
+                    kms = kmf.getKeyManagers();
                 }
+
+                // Setup our trust manager
+                TrustManager tms[] = getTrustManagers(pValidateCa);
+
+                // Finally setup our SSLContext
+                SSLContext sc = SSLContext.getInstance("SSL");
                 sc.init(kms, tms, new java.security.SecureRandom());
+
                 HttpsURLConnection.setDefaultSSLSocketFactory(sc.getSocketFactory());
             }
             URL url = new URL(server.getUrl());

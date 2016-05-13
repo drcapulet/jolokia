@@ -92,7 +92,7 @@ public class JolokiaServer {
      *              the JVM is not fully setup for the server detectors to work
      */
     public JolokiaServer(HttpServer pServer,JolokiaServerConfig pConfig, boolean pLazy) {
-        init(pServer,pConfig,pLazy);
+        init(pServer, pConfig, pLazy);
     }
 
     /**
@@ -311,13 +311,13 @@ public class JolokiaServer {
         String keystoreFile = pConfig.getKeystore();
         KeyStore keystore = KeyStore.getInstance(pConfig.getKeyStoreType());
         if (keystoreFile != null) {
-            // Load everything from a keystore which must include CA (if useClientSslAuthenticatin is used) and
+            // Load everything from a keystore which must include CA (if useClientSslAuthentication is used) and
             // server cert/key
             loadKeyStoreFromFile(keystore, keystoreFile, password);
         } else {
             // Load keys from PEM files
             keystore.load(null);
-            updateKeyStoreFromPEM(keystore,pConfig);
+            updateKeyStoreFromPEM(keystore, pConfig);
 
             // If no server cert is configured, then use a self-signed server certificate
             if (pConfig.getServerCert() == null) {
@@ -332,7 +332,7 @@ public class JolokiaServer {
                    InvalidKeySpecException, InvalidKeyException, NoSuchProviderException, SignatureException {
 
         if (pConfig.getCaCert() != null) {
-            File caCert = getAndValidateFile(pConfig.getCaCert(),"CA cert");
+            File caCert = getAndValidateFile(pConfig.getCaCert(), "CA cert");
             KeyStoreUtil.updateWithCaPem(keystore, caCert);
         } else if (pConfig.useSslClientAuthentication()) {
             throw new IllegalArgumentException("Cannot use client cert authentication if no CA is given with 'caCert'");
@@ -340,12 +340,12 @@ public class JolokiaServer {
 
         if (pConfig.getServerCert() != null) {
             // Use the provided server key
-            File serverCert = getAndValidateFile(pConfig.getServerCert(),"server cert");
+            File serverCert = getAndValidateFile(pConfig.getServerCert(), "server cert");
             if (pConfig.getServerKey() == null) {
                 throw new IllegalArgumentException("Cannot use server cert from " + pConfig.getServerCert() +
                                                    " without a provided a key given with 'serverKey'");
             }
-            File serverKey = getAndValidateFile(pConfig.getServerKey(),"server key");
+            File serverKey = getAndValidateFile(pConfig.getServerKey(), "server key");
             KeyStoreUtil.updateWithServerPems(keystore, serverCert, serverKey,
                                               pConfig.getServerKeyAlgorithm(), pConfig.getKeystorePassword());
         }

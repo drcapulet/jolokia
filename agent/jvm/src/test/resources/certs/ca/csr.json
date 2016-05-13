@@ -1,0 +1,19 @@
+{
+    "ca": {
+        "expiry": "87600h"
+    },
+    "CN": "ca.test.jolokia.org",
+    "key": {
+        "algo": "rsa",
+        "size": 4096
+    },
+    "names": [
+        {
+            "C":  "DE",
+            "ST": "Bavaria",
+            "L":  "Pegnitz",
+            "O":  "Jolokia",
+            "OU": "Dev/emailAddress=roland@jolokia.org"
+        }
+    ]
+}

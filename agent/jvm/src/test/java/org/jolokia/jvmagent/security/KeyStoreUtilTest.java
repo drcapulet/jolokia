@@ -36,14 +36,14 @@ import static org.testng.Assert.*;
 public class KeyStoreUtilTest {
 
     public static final String CA_CERT_SUBJECT_DN_CN = "CN=ca.test.jolokia.org";
-    public static final String SERVER_CERT_SUBJECT_DN = "CN=Server Cert signed and with extended key usage server, C=DE, ST=Franconia, L=Pegnitz, OU=Test, O=jolokia.org";
+    public static final String SERVER_CERT_SUBJECT_DN = "CN=Server Cert signed and with extended key usage server, ST=Franconia, L=Pegnitz, OU=Test, O=jolokia.org, C=DE";
 
-    public static final String CA_ALIAS = "cn=ca.test.jolokia.org,c=de,st=bavaria,l=pegnitz,1.2.840.113549.1.9.1=#1612726f6c616e64406a6f6c6f6b69612e6f7267,ou=dev,o=jolokia";
-    public static final String SERVER_ALIAS = "cn=server cert signed and with extended key usage server,c=de,st=franconia,l=pegnitz,ou=test,o=jolokia.org";
+    public static final String CA_ALIAS = "cn=ca.test.jolokia.org,st=bavaria,l=pegnitz,ou=dev/emailaddress\\=roland@jolokia.org,o=jolokia,c=de";
+    public static final String SERVER_ALIAS = "cn=server cert signed and with extended key usage server,st=franconia,l=pegnitz,ou=test,o=jolokia.org,c=de";
 
     @Test
     public void testTrustStore() throws KeyStoreException, CertificateException, NoSuchAlgorithmException, IOException {
-        File caPem = getTempFile("ca/cert.pem");
+        File caPem = getTempFile("ca/ca.pem");
         KeyStore keystore = createKeyStore();
 
         KeyStoreUtil.updateWithCaPem(keystore, caPem);
@@ -61,8 +61,8 @@ public class KeyStoreUtilTest {
 
     @Test
     public void testKeyStore() throws IOException, CertificateException, NoSuchAlgorithmException, KeyStoreException, InvalidKeySpecException, UnrecoverableKeyException {
-        File serverPem = getTempFile("server/cert.pem");
-        File keyPem = getTempFile("server/key.pem");
+        File serverPem = getTempFile("server/server.pem");
+        File keyPem = getTempFile("server/server-key.pem");
         KeyStore keystore = createKeyStore();
 
         KeyStoreUtil.updateWithServerPems(keystore, serverPem, keyPem, "RSA", new char[0]);
@@ -84,13 +84,16 @@ public class KeyStoreUtilTest {
 
     @Test
     public void testBoth() throws CertificateException, NoSuchAlgorithmException, KeyStoreException, IOException, InvalidKeySpecException, InvalidKeyException, NoSuchProviderException, SignatureException {
-        File caPem = getTempFile("ca/cert.pem");
-        File serverPem = getTempFile("server/cert.pem");
-        File keyPem = getTempFile("server/key.pem");
+        File caPem = getTempFile("ca/ca.pem");
+        File serverPem = getTempFile("server/server.pem");
+        File keyPem = getTempFile("server/server-key.pem");
 
         KeyStore keystore = createKeyStore();
         KeyStoreUtil.updateWithCaPem(keystore, caPem);
         KeyStoreUtil.updateWithServerPems(keystore, serverPem, keyPem, "RSA", new char[0]);
+
+        assertTrue(keystore.containsAlias(CA_ALIAS), String.format("Keystore missing alias for CA '%s'", CA_ALIAS));
+        assertTrue(keystore.containsAlias(SERVER_ALIAS), String.format("Keystore missing alias for server '%s'", SERVER_ALIAS));
 
         X509Certificate caCert = (X509Certificate) keystore.getCertificate(CA_ALIAS);
         X509Certificate serverCert = (X509Certificate) keystore.getCertificate(SERVER_ALIAS);
@@ -112,7 +115,7 @@ public class KeyStoreUtilTest {
             } catch (Exception exp) {
             }
             try {
-                KeyStoreUtil.updateWithServerPems(keystore, getTempFile("server/cert.pem"), invalidPem, "RSA", new char[0]);
+                KeyStoreUtil.updateWithServerPems(keystore, getTempFile("server/server.pem"), invalidPem, "RSA", new char[0]);
                 fail();
             } catch (Exception exp) {
             }

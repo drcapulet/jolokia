@@ -1,0 +1,16 @@
+{
+    "CN": "Client cert self-signed with key usage client",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C":  "DE",
+            "ST": "Franconia",
+            "L":  "Pegnitz",
+            "O":  "jolokia.org",
+            "OU": "Test"
+        }
+    ]
+}

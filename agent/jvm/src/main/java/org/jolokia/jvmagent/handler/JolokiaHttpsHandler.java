@@ -70,7 +70,7 @@ public class JolokiaHttpsHandler extends JolokiaHttpHandler {
 
     // =================================================================================
 
-    // Verify https certs if its Https request and we have SSL auth enabled. Will be called before
+    // Verify https certs if it's a HTTPS request and we have SSL auth enabled. Will be called before
     // handling the request
     protected void checkAuthentication(HttpExchange pHttpExchange) throws SecurityException {
         // Cast will always work since this handler is only used for Http

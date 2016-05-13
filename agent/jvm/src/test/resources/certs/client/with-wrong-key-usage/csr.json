@@ -1,0 +1,16 @@
+{
+    "CN": "Client signed with server key usage",
+    "key": {
+        "algo": "rsa",
+        "size": 2048
+    },
+    "names": [
+        {
+            "C":  "DE",
+            "ST": "Franconia",
+            "L":  "Pegnitz",
+            "O":  "jolokia.org",
+            "OU": "Test"
+        }
+    ]
+}
